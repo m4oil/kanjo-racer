@@ -1,0 +1,59 @@
+name: Build GBA ROM
+
+on:
+  push:
+  workflow_dispatch:      # lets you press "Run workflow" manually
+
+permissions:
+  contents: write         # needed to publish the ROM as a Release
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: devkitpro/devkitarm:latest
+
+    steps:
+      - name: Install tools
+        run: |
+          apt-get update
+          apt-get install -y git python3 python-is-python3 zip
+
+      - name: Check out this repo
+        uses: actions/checkout@v4
+
+      - name: Download Butano (GBA engine)
+        run: |
+          git clone --depth 1 https://github.com/GValiente/butano.git /butano
+          echo "Butano commit: $(git -C /butano rev-parse HEAD)"
+
+      - name: Assemble project inside Butano
+        run: |
+          cp -r /butano/template /butano/kanjo_racer
+          rm -rf /butano/kanjo_racer/src /butano/kanjo_racer/graphics
+          cp -r src graphics /butano/kanjo_racer/
+          sed -i 's/^ROMTITLE.*/ROMTITLE := KANJO RACER/' /butano/kanjo_racer/Makefile
+          sed -i 's/^TARGET.*/TARGET := kanjo_racer/' /butano/kanjo_racer/Makefile
+
+      - name: Build ROM
+        working-directory: /butano/kanjo_racer
+        run: make -j$(nproc)
+
+      - name: Collect ROM
+        run: |
+          mkdir -p out
+          cp /butano/kanjo_racer/kanjo_racer.gba out/
+          ls -la out
+
+      - name: Save ROM as downloadable build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kanjo_racer_rom
+          path: out/kanjo_racer.gba
+
+      - name: Publish ROM as a Release (direct download link)
+        continue-on-error: true
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: Kanjo Racer - Bear Products (latest build)
+          files: out/kanjo_racer.gba
