@@ -36,7 +36,28 @@ jobs:
 
       - name: Build ROM
         working-directory: /butano/kanjo_racer
-        run: make -j$(nproc)
+        run: |
+          set -o pipefail
+          make -j1 2>&1 | tee /build.log
+
+      - name: Show build errors (only runs if the build failed)
+        if: failure()
+        run: |
+          {
+            echo "## Build errors - copy this box and send it back"
+            echo '```'
+            grep -n -B3 -A8 -E "error|Error" /build.log | head -150
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          grep -n -B3 -A8 -E "error|Error" /build.log | head -150 || true
+
+      - name: Save full build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build_log
+          path: /build.log
+          if-no-files-found: ignore
 
       - name: Collect ROM
         run: |
