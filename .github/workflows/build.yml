@@ -33,7 +33,21 @@ jobs:
         run: |
           cp -r /butano/template /butano/kanjo_racer
           rm -rf /butano/kanjo_racer/src /butano/kanjo_racer/graphics
-          cp -r src graphics /butano/kanjo_racer/
+          # Butano's built-in fonts live in /butano/common - copy them into the project
+          P=/butano/kanjo_racer
+          mkdir -p $P/include $P/src $P/graphics
+          if [ -d /butano/common ]; then
+            [ -d /butano/common/include ]  && cp -r /butano/common/include/.  $P/include/
+            [ -d /butano/common/src ]      && cp -r /butano/common/src/.      $P/src/
+            [ -d /butano/common/graphics ] && cp -r /butano/common/graphics/. $P/graphics/
+            true
+          else
+            echo "No /butano/common folder; font files found elsewhere:"
+            find /butano -iname 'common_*font*' | head
+          fi
+          # our own files go in last so they win any name clash
+          cp -r src/. $P/src/
+          cp -r graphics/. $P/graphics/
           sed -i 's/^ROMTITLE.*/ROMTITLE := KANJO RACER/' /butano/kanjo_racer/Makefile
           sed -i 's/^TARGET.*/TARGET := kanjo_racer/' /butano/kanjo_racer/Makefile
 
@@ -43,16 +57,23 @@ jobs:
           set -o pipefail
           make -j1 2>&1 | tee /build.log
 
-      - name: Show build errors (only runs if the build failed)
+      - name: Show build log (only runs if the build failed)
         if: failure()
         run: |
           {
-            echo "## Build errors - copy this box and send it back"
+            echo "## Build log - copy EVERYTHING inside this box and send it back"
             echo '```'
-            grep -n -B3 -A8 -E "error|Error" /build.log | head -150
+            head -c 7000 /build.log
+            echo
+            echo "---- Makefile settings ----"
+            grep -nE '^(TARGET|ROMTITLE|LIBBUTANO|SOURCES|INCLUDES|GRAPHICS|AUDIO|USER[A-Z]*|PYTHON)' /butano/kanjo_racer/Makefile || true
+            echo "---- project folder ----"
+            ls /butano/kanjo_racer 2>&1 | head -20
+            echo "---- common/include ----"
+            ls /butano/common/include 2>&1 | head -30
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
-          grep -n -B3 -A8 -E "error|Error" /build.log | head -150 || true
+          head -c 7000 /build.log
 
       - name: Save full build log
         if: always()
@@ -81,3 +102,4 @@ jobs:
           tag_name: latest
           name: Kanjo Racer - Bear Products (latest build)
           files: out/kanjo_racer.gba
+    
